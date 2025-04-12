@@ -1,29 +1,29 @@
-coxphm=function(time, status, trt=NULL, z, beta0=NULL, time0=NULL, s=NULL, maxiter=1000, eps=0.01){
-
-  #0. set up
-  time.min=0 #min(time,na.rm=TRUE)
-  time.max=max(time,na.rm=TRUE)
-
+coxphm=function(time, status, trt, z, beta0=NULL, time0=NULL, Atime, Btime, u, s=NULL, maxiter=1000, eps=0.01){
+  ###
+  #1. set up
+  ###
+  #set smoothing parameter
   n=length(time)
   if(is.null(s))
-    s=1/qnorm(1-n^(-2))*0.001
+    s=1/qnorm(exp(-n^(-2)))*0.01
+
+  #set initial value, beta0 & time0
   if(is.null(beta0)){
     zmat=as.matrix(z,nrow=n)
     beta0=coef(glm(status ~ zmat, family = "binomial"))[-1] #from logistic
   }
 
-  if(is.null(trt)){
-    trt=rep(NA,n)
-    trt[is.na(time)]=0
-    trt[!is.na(time)]=1
-  }
-
   if(is.null(time0)){
-    time0=sample(time[which(trt==1)],length(time[which(trt==0)]),replace=TRUE) #random selection
+    Afit=lm(Atime~u,data=df) #based on only trt=1
+    Atime.hat=cbind(1,u) %*% matrix(coef(Afit),ncol=1)
+    time.hat=as.numeric(Btime-Atime.hat)
+    time0=time.hat[which(trt==0)]
   }
 
-  #1. define subgroups and variables
-  x=as.numeric(!is.na(time)) #missing indicator should be same as x=1 for treatment; x=0 for control (same as trt)
+  ###
+  #1. define two datasets (for treatment and control) & variables
+  ###
+  x=trt
   df=data.frame(time=time,status=status,x=x,z=z)
   dfC=df[which(x==0),]
   dfT=df[which(x==1),]
@@ -39,13 +39,14 @@ coxphm=function(time, status, trt=NULL, z, beta0=NULL, time0=NULL, s=NULL, maxit
     namez=colnames(z)
   }
 
-  #2. define new data structure
+  ###
+  #2. further define the two datasets.
+  ###
   dfC0=list(m=mC,time=dfC$time, #NA for time
             status=dfC$status,wstatus=which(dfC$status==1),
             x=dfC$x,
             z=as.matrix(dfC[,-c(1,2,3)],nrow=mC),  #-1,2,3 for time,status,x
-            zb=NA,ezb=NA
-  )
+            zb=NA,ezb=NA)
 
   dfT0=list(m=mT,time=dfT$time,
             status=dfT$status,wstatus=which(dfT$status==1),
@@ -53,7 +54,10 @@ coxphm=function(time, status, trt=NULL, z, beta0=NULL, time0=NULL, s=NULL, maxit
             z=as.matrix(dfT[,-c(1,2,3)],nrow=mT),
             zb=NA,ezb=NA)
 
-  #3.initial value
+  ###
+  #3.NR+optim
+  ###
+  #3.1. initial setup
   beta0=matrix(beta0,ncol=1)
 
   dfC0$time=time0
@@ -64,11 +68,13 @@ coxphm=function(time, status, trt=NULL, z, beta0=NULL, time0=NULL, s=NULL, maxit
   dfT0$zb=c(dfT0$z %*% beta0)
   dfT0$ezb=exp(dfT0$zb)
 
-  #3. NR + optim
+  #3.2. NR + optim
   conv="no"
   dist=1
   iter=0
   eta0=time0
+
+  loglik0=lpl(dfC0,dfT0,s)
 
   while(conv=="no"){
     iter=iter+1
@@ -94,15 +100,15 @@ coxphm=function(time, status, trt=NULL, z, beta0=NULL, time0=NULL, s=NULL, maxit
     data=rbind(TT,CC)
 
     #optim.fit <- optim(par = par, fn = n_ps_pll, data=data, control=list(maxit=maxiter), method = "BFGS", hessian = FALSE)
-    try2=try(optim.fit <- optim(par = par, fn = n_ps_pll, data=data, control=list(maxit=maxiter), method = "L-BFGS-B", hessian = FALSE, lower=time.min, upper=time.max),silent=TRUE)
+    try2=try(optim.fit <- optim(par = par, fn = n_ps_pll, data=data, control=list(maxit=maxiter), method = "L-BFGS-B", hessian = FALSE, lower=0),silent=TRUE)
     if(class(try2)[1]=="try-error")
       break
 
     eta1=optim.fit$par
 
-    #3. euclidean distance
-    dist=sqrt(sum((beta1-beta0)^2))+sqrt(sum((eta1-eta0)^2))
-
+    #3. distance
+    loglik1=lpl(dfC1,dfT1,s)
+    dist=abs((loglik1-loglik0)/loglik0)
 
     if(is.na(dist))
       break
@@ -116,11 +122,16 @@ coxphm=function(time, status, trt=NULL, z, beta0=NULL, time0=NULL, s=NULL, maxit
     beta0=beta1
     eta0=eta1
 
+    loglik0=loglik1
+
     #print(round(c(iter,dist),3))
     if(iter>maxiter)
       break
   }
 
+  ###
+  #4. summary
+  ###
   if(conv=="no"){ #not converged
     res=list(conv="no",beta=NA,eta=NA,loglik=NA)
   }else{

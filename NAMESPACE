@@ -1,5 +1,5 @@
 importFrom("survival", "coxph", "Surv", "survfit", "survdiff")
 importFrom("MASS", "ginv")
-importFrom("stats", "dnorm","pnorm", "qnorm", "glm","coef","confint","optim")
+importFrom("stats", "dnorm","pnorm", "qnorm", "glm","coef","confint","optim","lm")
 
 export(coxphm)
