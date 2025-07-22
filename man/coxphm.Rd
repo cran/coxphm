@@ -19,11 +19,12 @@ coxphm(time, status, trt, z, beta0, time0, Atime, Btime, u, s, maxiter, eps)
   \item{maxiter}{Number of maximim iteration. Default: maxiter=1000.}
   \item{eps}{Stopping critiera. Default: eps=0.01.}
 }
-\details{Cox's proportional hazards model is not directly used to estimate treatment effects when survival times for subjects in the control group are missing. By regarding these missing survival times as nuisance parameters, the pseudo partial likelihood function is used to estimate the regression and nuisance parameters simultaneously with an unspecified baseline hazard function.
+\details{It is not possible to estimate treatment effects under Cox's proportional hazards model when survival times for subjects in the control group are missing. The coxphm function addresses this by regarding the missing survival times as nuisance parameters. A pseudo partial likelihood function is then used to estimate the regression coefficients and nuisance parameters simultaneously with an unspecified baseline hazard function.
 
-In the pseudo partial likelihood, the smoothed parameter s is used to approximate risk sets as cumulative normal distributions with s as the scale parameter. Choosing a sufficiently small s ensures that the pseudo partial likelihood accurately approximates the partial likelihood.
+In the pseudo partial likelihood function, a smoothed parameter s is used to approximate the risk sets as cumulative normal distributions. Choosing a sufficiently small value of s ensures that the pseudo partial likelihood closely approximates the partial likelihood.
 
-The method depends on the choice of initial value, and hence, it is crucial to choose the initial value as close to the true value as possible. If this is not possible, a data-driven initial value can is utilized as follows. If beta0=NULL, a logistic regression is used to model the probability of status=1 using z as a predictor, and beta0 is set to the regression coefficient from the logistic regression. If time0=NULL, a linear regression is used to model Atime using u as a predictor, and time0 is set to Btime minus estimated Atime. Here, u and Btime are observed for all samples, whereas Atime is observed for trt=1. Here, Atime,Btime and u are not used if time0 is input.}
+The method is sensitive to the choice of initial values; therefore, it is crucial to choose these values as close as possible to the true values. If this is not feasible, a data-driven approach is used to determine initial values as follows. If beta0=NULL, a logistic regression is used to model the probability of status=1 using z as a predictor, and beta0 is set to the estimated regression coefficient(s). If time0=NULL, a linear regression is used to model Atime using u as a predictor, and time0 is set to Btime minus estimated Atime. Here, u and Btime are observed for all subjects, while Atime is observed only for subjects with trt = 1.
+}
 
 \value{
 \item{conv}{Algorithm convergence: yes or not.}
@@ -33,21 +34,18 @@ The method depends on the choice of initial value, and hence, it is crucial to c
 \item{iter}{Number of iterations.}
 }
 
-\references{Pseudo partial likelihood method for proportional hazards models when time origin is missing for control group with applications to SARS-CoV-2 Seroprevalence Study (in-progress)}
+\references{Chung, Y., Murugan, V., Beyene, K, and Chen, D., Pseudo partial likelihood method for proportional hazards models when time origin is missing for control group with applications to SARS-CoV-2 Seroprevalence Study. Journal of Data Science (under review).}
 \author{Yunro Chung [aut, cre]}
 
 \examples{
 #Mayo's pbc dataset from the survival package.
 pbc1=pbc[1:200,] #use the first 200 patients
-
 time=pbc1$time
 status=pbc1$status
 status[which(status==1)]=0 #transplant
 status[which(status==2)]=1 #death
-
 trt=pbc1$trt
 trt[which(trt==2)]=0 #0 for placebo, 1 for treatment
-
 age=pbc1$age
 z=cbind(trt,age)
 colnames(z)=c("trt","age")
@@ -60,13 +58,11 @@ fit0=coxph(Surv(time,status)~z)
 beta0=fit0$coefficients
 time0=time[which(trt==0)]
 
-#1.2. Survival times are missing if trt=0
+#1.2. fits pseudo-Cox, assuming survival times are missing if trt=0
 time[which(trt==0)]=NA
-
-#1.3. fits pseudo-Cox
 fit1=coxphm(time, status, trt=trt, z=z, beta0=beta0, time0=time0)
 
-#2. Cox vs pseudo-cox
+#2. Cox vs Pseudo-Cox
 print(summary(fit0)$coefficient)
 print(fit1$beta)
 }
